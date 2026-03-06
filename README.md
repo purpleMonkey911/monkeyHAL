@@ -1,4 +1,4 @@
-# monkeyHAL
+# monkeyHAL (mHAL)
 *Let's make some bits :)*
 
 ## Summary
