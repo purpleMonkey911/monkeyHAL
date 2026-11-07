@@ -104,3 +104,12 @@ mHalStatus RingBuffer_GetData(RingBuffer buffer, uint8_t* data, size_t size) {
 	}
     return MHAL_STATUS_ERROR_INVALID_PARAM;
 }
+
+mHalStatus RingBuffer_Reset(RingBuffer buffer) {
+    if (buffer) {
+        buffer->head = 0;
+        buffer->tail = 0;
+        return MHAL_STATUS_OK;
+    }
+    return MHAL_STATUS_ERROR_INVALID_PARAM;
+}

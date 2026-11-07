@@ -67,4 +67,13 @@ extern mHalStatus RingBuffer_AddData(RingBuffer buffer, const uint8_t* data, siz
   */
 extern mHalStatus RingBuffer_GetData(RingBuffer buffer, uint8_t* data, size_t size);
 
+/**
+  * @brief  Resets RingBuffer.  All data is lost. 
+  * 
+  * @param  [in] buffer RingBuffer to get data from
+  * 
+  * @return MHAL_STATUS_OK if successful, otherwise a mHAL error
+  */
+extern mHalStatus RingBuffer_Reset(RingBuffer buffer);
+
 #endif // __RING_BUFFER_H__
