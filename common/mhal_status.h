@@ -10,6 +10,7 @@
 #define __MHAL_STATUS_H__
 
 typedef enum {
+    MHAL_STATUS_ERROR_NO_DATA       = -7,
     MHAL_STATUS_ERROR_IO            = -6,
     MHAL_STATUS_ERROR_INVALID_PARAM = -5,
     MHAL_STATUS_ERROR_DISABLED      = -4,
