@@ -1,10 +1,26 @@
 /**
  * @file mhal_uart.h
  * 
- * @brief UART HAL implementation for monkeyHAL
+ * @brief UART HAL implementation for monkeyHAL.  
+ * 
+ *        This is a user-space linux device driver.  The design of this driver
+ *        is meant to work around the lack of kernel space access to create a
+ *        non-blocking device driver.  Use of this driver is a follows:
+ *        - declare a Uart instance
+ *        - initialize the instance (mHalUart_Init())
+ *        - exercise the Uart state machine (mHalUart_StateMachine()) as
+ *          quickly as poosible (e.g. main while loop)
+ *        - call mHalUart_SendData() to send data
+ *        - call mHalUart_GetData() or mHalUart_GetByte() to get data
+ * 
+ *        The device driver will store data (for both Tx and RX) in a ring
+ *        buffer. The onus is on the application to exercise the state
+ *        machine (to send data) and consume data (via mHalUart_GetData() or
+ *        mHalUart_GetByte()) before the ring buffer wraps and overwrites the
+ *        old data with new data.
  * 
  * @copyright Copyright © 2026 Purple Monkey Software. All rights reserved.
- * 
+ *
  */
 
 #ifndef __MHAL_UART_H__
@@ -74,10 +90,12 @@ typedef enum {
 
 // Uart configuration structure
 typedef struct {
+    const char* port;
     UartBaudRate baud;     // Baud rate for the UART communication
     UartDataBits data_bits; // Number of data bits (5, 6, 7, or 8)
     UartStopBits stop_bits; // Number of stop bits (1 or 2)
-    UartParity parity; // Parity setting (none, odd, or even)
+    UartParity parity_bits; // Parity setting (none, odd, or even)
+    size_t ring_buffer_size;
 } UartConfig;
 
 /**
@@ -85,16 +103,14 @@ typedef struct {
  *        and opens the UART port for communication.
  * 
  * @param  pUart     Pointer to the Uart instance to initialize
- * @param  port      The UART port to open (e.g., "/dev/ttyUSB0")
  * @param  config    Pointer to the UartConfig structure containing UART settings
- * @param  ring_buffer_size Size of the ring buffers to create for TX and RX
  *
  * @return MHAL_STATUS_OK if successful, otherwise a monkeyHAL error
  * 
  * @note This function allocates memory for the Uart instance and its ring buffers.
  *       It should be called during system initialization.
  */
-extern mHalStatus mHalUart_Init(Uart* pUart, const char* port, UartConfig* config, size_t ring_buffer_size);
+extern mHalStatus mHalUart_Init(Uart* pUart, UartConfig* config);
 
 /**
  * @brief Deinitialize Uart instance. This function closes the UART port,
@@ -116,7 +132,7 @@ extern mHalStatus mHalUart_Deinit(Uart* pUart);
  * 
  * @return MHAL_STATUS_OK if successful, otherwise a monkeyHAL error
  */
-extern mHalStatus mHalUart_SetLoopback(Uart uart, bool enable);
+extern mHalStatus mHalUart_LoopbackCtrl(Uart uart, bool enable);
 
 /**
  * @brief Send data through the UART port.

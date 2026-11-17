@@ -1,7 +1,21 @@
 /**
  * @file mhal_uart.c
  * 
- * @brief UART HAL implementation for monkeyHAL.
+ *        This is a user-space linux device driver.  The design of this driver
+ *        is meant to work around the lack of kernel space access to create a
+ *        non-blocking device driver.  Use of this driver is a follows:
+ *        - declare a Uart instance
+ *        - initialize the instance (mHalUart_Init())
+ *        - exercise the Uart state machine (mHalUart_StateMachine()) as
+ *          quickly as poosible (e.g. main while loop)
+ *        - call mHalUart_SendData() to send data
+ *        - call mHalUart_GetData() or mHalUart_GetByte() to get data
+ * 
+ *        The device driver will store data (for both Tx and RX) in a ring
+ *        buffer. The onus is on the application to exercise the state
+ *        machine (to send data) and consume data (via mHalUart_GetData() or
+ *        mHalUart_GetByte()) before the ring buffer wraps and overwrites the
+ *        old data with new data.
  * 
  * @copyright Copyright © 2026 Purple Monkey Software. All rights reserved.
  * 
@@ -49,8 +63,8 @@ typedef struct _uart_t {
 } uart_t;
 
 
-mHalStatus mHalUart_Init(Uart* pUart, const char* port, UartConfig* config, size_t ring_buffer_size) {
-    if (!port || !pUart || !config || ring_buffer_size == 0) {
+mHalStatus mHalUart_Init(Uart* pUart, UartConfig* config) {
+    if (!pUart || !config || !config->port || config->ring_buffer_size == 0) {
         return MHAL_STATUS_ERROR_INVALID_PARAM;
     }
 
@@ -61,24 +75,24 @@ mHalStatus mHalUart_Init(Uart* pUart, const char* port, UartConfig* config, size
     }
 
     // Initialize UART properties
-    strncpy(new_uart->port, port, sizeof(new_uart->port) - 1);
+    strncpy(new_uart->port, config->port, sizeof(new_uart->port) - 1);
     new_uart->port[sizeof(new_uart->port) - 1] = '\0';
     new_uart->fd = -1; // File descriptor not opened yet
 
     // Create ring buffers
-    mHalStatus status = RingBuffer_Create(&new_uart->tx_buffer, ring_buffer_size);
+    mHalStatus status = RingBuffer_Create(&new_uart->tx_buffer, config->ring_buffer_size);
     if (status != MHAL_STATUS_OK) {
         free(new_uart);
         return status;
     }
     
-    status = RingBuffer_Create(&new_uart->rx_buffer, ring_buffer_size);
+    status = RingBuffer_Create(&new_uart->rx_buffer, config->ring_buffer_size);
     if (status != MHAL_STATUS_OK) {
         RingBuffer_Destroy(&new_uart->tx_buffer);
         free(new_uart);
         return status;
     }
-    new_uart->ring_buffer_size = ring_buffer_size;
+    new_uart->ring_buffer_size = config->ring_buffer_size;
 
     // Initialize state machine
     new_uart->state_machine.state = UART_STATE_OK;
@@ -114,13 +128,12 @@ mHalStatus mHalUart_Init(Uart* pUart, const char* port, UartConfig* config, size
 
     // Configure control modes
     options.c_cflag &= ~(CSIZE | PARENB | CSTOPB | CRTSCTS);
-    options.c_cflag |= (config->data_bits | config->parity |
+    options.c_cflag |= (config->data_bits | config->parity_bits |
                         (config->stop_bits == UART_STOP_BITS_2 ? CSTOPB : 0));
     options.c_cflag |= (CLOCAL | CREAD); // Ignore modem control lines and enable receiver
 
     // Configure local modes
     options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG | IEXTEN); // Disable canonical mode, echo, and extended functions
-    options.c_lflag |= (ISIG | IEXTEN); // Enable signal handling and extended functions
 
     // Set the baud rates
     cfsetispeed(&options, config->baud);
@@ -183,7 +196,7 @@ mHalStatus mHalUart_Deinit(Uart* pUart) {
     return MHAL_STATUS_OK;
 }
 
-mHalStatus mHalUart_SetLoopback(Uart uart, bool enable) {
+mHalStatus mHalUart_LoopbackCtrl(Uart uart, bool enable) {
     if (!uart) {
         return MHAL_STATUS_ERROR_INVALID_PARAM;
     }
@@ -239,7 +252,6 @@ mHalStatus mHalUart_StateMachine(Uart uart) {
 #endif // DEBUG_IO
                 // No data available
                 retval = MHAL_STATUS_OK;
-                break;
             } else if (uart->state_machine.loopback) {
                 // If loopback is enabled, write the data back to the TX buffer
                 mHalStatus status = RingBuffer_AddData(uart->tx_buffer, data, bytes_read);
@@ -268,6 +280,7 @@ mHalStatus mHalUart_StateMachine(Uart uart) {
             }
 
             // Process TX buffer
+            retval = MHAL_STATUS_OK;
             while (!RingBuffer_IsEmpty(uart->tx_buffer)) {
                 mHalStatus status = RingBuffer_GetData(uart->tx_buffer, &tx_data, 1);
                 if (status != MHAL_STATUS_OK) {
@@ -278,9 +291,14 @@ mHalStatus mHalUart_StateMachine(Uart uart) {
                 }
 
                 // Write data to UART
-                write(uart->fd, &tx_data, 1);
+                ssize_t size = write(uart->fd, &tx_data, 1);
+                if (size != 1) {
+                    uart->state_machine.pending_error = MHAL_STATUS_ERROR_IO;
+                    uart->state_machine.state = UART_STATE_ERROR;
+                    retval = MHAL_STATUS_BUSY;
+                    break;
+                }
             }
-            retval = MHAL_STATUS_OK;
             break;
         case UART_STATE_ERROR:
             uart->state_machine.error_count++;
