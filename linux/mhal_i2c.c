@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -88,6 +89,7 @@ mHalStatus mHalI2c_Init(I2c* pI2c, I2cConfig* config) {
 
     *pI2c = i2c;
 
+    printf("<mHalI2c> Initialized i2c on port %s \n", config->i2c_bus);
     return MHAL_STATUS_OK;
 }
 
