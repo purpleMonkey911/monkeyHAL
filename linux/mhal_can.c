@@ -3,6 +3,21 @@
  * 
  * @brief CAN HAL implementation for monkeyHAL.
  * 
+ *        This is a user-space linux device driver.  The design of this driver
+ *        is meant to work around the lack of kernel space access to create a
+ *        non-blocking device driver.  Use of this driver is a follows:
+ *        - declare a Can instance
+ *        - initialize the instance (mHalCan_Init())
+ *        - exercise the Can state machine (mHalCan_StateMachine()) as
+ *          quickly as poosible (e.g. main while loop)
+ *        - call mHalCan_SendCanFrame() to send data
+ *        - call mHalCan_GetCanFrame() to get data
+ * 
+ *        The device driver will store data (for both send and receive) in a
+ *        ring buffer. The onus is on the application to exercise the state
+ *        machine (to send data) and consume data (via mHalCan_GetCanFrame())
+ *        before the ring buffer wraps and overwrites the old data with new
+ *        data.
  * 
  * @copyright Copyright © 2026 Purple Monkey Software. All rights reserved.
  * 
