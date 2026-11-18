@@ -315,3 +315,7 @@ mHalStatus mHalUart_StateMachine(Uart uart) {
 
     return retval;
 }
+
+int mHalUart_GetFd(Uart uart) {
+    return uart ? uart->fd : -1;
+}

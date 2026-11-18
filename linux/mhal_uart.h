@@ -182,4 +182,15 @@ extern mHalStatus mHalUart_GetByte(Uart uart, uint8_t* data);
  */
 extern mHalStatus mHalUart_StateMachine(Uart uart);
 
+/**
+ * @brief Get the UART file descriptor, for use with poll()/select()/epoll.
+ *        POLLIN means received data is waiting; call mHalUart_StateMachine()
+ *        to move it into the RX ring buffer.  Do not read() the fd yourself.
+ *
+ * @param uart Uart instance
+ *
+ * @return file descriptor, or -1 if uart is NULL
+ */
+extern int mHalUart_GetFd(Uart uart);
+
 #endif // __MHAL_UART_H__
