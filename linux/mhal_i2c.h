@@ -120,4 +120,17 @@ extern mHalStatus mHalI2c_Xfer(I2c i2c, I2cXfer* xfer, uint8_t* buffer, size_t s
  */
 extern mHalStatus mHalI2c_StateMachine(I2c i2c);
 
+/**
+ * @brief Get a file descriptor that becomes readable (POLLIN) when a transfer
+ *        completes, for use with poll()/select()/epoll.
+ *
+ *        When it is readable, call mHalI2c_StateMachine() to collect the
+ *        result; that also clears the event.  Do not read() the fd yourself.
+ *
+ * @param i2c I2c instance
+ *
+ * @return file descriptor, or -1 if i2c is NULL
+ */
+extern int mHalI2c_GetEventFd(I2c i2c);
+
 #endif // __MHAL_I2C_H__
