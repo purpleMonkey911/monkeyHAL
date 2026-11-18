@@ -181,7 +181,7 @@ static uint32_t GetUartFlowCtrl(UartHwFlowCtrl ctrl) {
         retval = UART_HWCONTROL_RTS;
         break;
     case UART_HW_FLOW_CTRL_CTS:
-        retval = UART_HW_FLOW_CTRL_CTS;
+        retval = UART_HWCONTROL_CTS;
         break;
     case UART_HW_FLOW_CTRL_RTS_CTS:
         retval = UART_HWCONTROL_RTS_CTS;
