@@ -278,7 +278,7 @@ static I2c GetI2cFromHandle(I2C_HandleTypeDef *hi2c) {
  *        the same I2C peripheral.  So the check must be done at the register
  *        level.
  * 
- * @param [in] pI2c  pointer I2c instance
+ * @param [in] i2c  I2c instance
  * 
  * @return true if bus is available, otherwise false
  */

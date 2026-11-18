@@ -3,6 +3,44 @@
  * 
  * @brief I2C Abstraction Layer for monkeyHAL
  * 
+ *        This is a user-space linux device driver.  The design of this driver
+ *        is meant to work around the lack of kernel space access to create a
+ *        non-blocking device driver.  Use of this driver is a follows:
+ *        - declare a I2c instance
+ *        - initialize the instance (mHalI2c_Init())
+ *        - exercise the Uart state machine (mHalI2c_StateMachine()) as
+ *          quickly as poosible (e.g. main while loop)
+ *        - call mHalI2c_Xfer() to transfer data
+ * 
+ *        The application provide a persistent buffer (when calling
+ *        mHalI2c_Xfer()) that will contain any data to send or receive any
+ *        data to receive.  The I2cXfer type (also passed when calling
+ *        mHalI2c_Xfer()) contains all I2C settings for the transfer.  It is
+ *        sent with each transfer because there may be multiple devices on the
+ *        bus with different I2C settings.
+ * 
+ *        Linux i2c-dev has no non-blocking interface: read(), write() and
+ *        ioctl(I2C_RDWR) block until the bus transaction completes.  To keep
+ *        mHalI2c_Xfer() non-blocking (like the UART and CAN drivers), each I2c
+ *        instance owns a worker thread that performs the blocking call.
+ *
+ *        Thread model:
+ *        - mHalI2c_Xfer() (caller's thread) queues one transfer: OK -> PENDING
+ *        - worker thread picks it up:                PENDING -> XFER
+ *          and runs the blocking transfer:           XFER -> DONE / ERROR
+ *        - mHalI2c_StateMachine() (caller's thread)   DONE / ERROR -> OK
+ *          and invokes done_cb / error_cb.
+ *        Callbacks therefore always run in the thread that calls
+ *        mHalI2c_StateMachine(), never in the worker thread.
+ *
+ *        When the worker finishes it also signals an eventfd
+ *        (mHalI2c_GetEventFd()), so the caller can sleep in poll() instead
+ *        of spinning on mHalI2c_StateMachine().
+ *
+ *        The caller must not touch the transfer buffer until the transfer
+ *        completes (done_cb / error_cb, or mHalI2c_StateMachine() returns
+ *        DONE / an error) -- same contract as a DMA transfer.
+ * 
  * @note only master mode is supported
  *
  * @copyright Copyright © 2026 Purple Monkey Software. All rights reserved.
