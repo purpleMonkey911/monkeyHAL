@@ -10,6 +10,10 @@
 #ifndef __RING_BUFFER_H__
 #define __RING_BUFFER_H__
 
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include "mhal_status.h"
 
 typedef struct _ring_buffer ring_buffer;
