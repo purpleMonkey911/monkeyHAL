@@ -536,9 +536,36 @@ mHalStatus mHalI2c_Xfer(I2c i2c, I2cXfer* xfer, uint8_t* buffer, size_t size) {
     return MHAL_STATUS_OK;
 }
 
+/**
+ * @brief Shut down the peripheral after a transfer, clear the transfer and
+ *        return the state machine to idle (I2C_STATE_OK).
+ *
+ * @param i2c I2c instance
+ *
+ * @note Only call when no transfer is in progress on the bus (DONE / ERROR).
+ */
+static void I2c_ResetXfer(I2c i2c) {
+    if (i2c->state_machine.xfer.mode == I2C_MODE_FAST_PLUS) {
+        __HAL_SYSCFG_FASTMODEPLUS_DISABLE(fmp_flag[i2c->index]);
+    }
+    __HAL_I2C_DISABLE(&i2c->hi2c);
+    i2c->state_machine.pending_error = MHAL_STATUS_OK;
+    i2c->state_machine.state = I2C_STATE_OK;
+    i2c->state_machine.xfer.buffer = NULL;
+    i2c->state_machine.xfer.buffer_size = 0;
+    i2c->state_machine.xfer.reg_size = 0;
+    i2c->state_machine.xfer.done_cb = NULL;
+    i2c->state_machine.xfer.done_cb_ctx = NULL;
+    i2c->state_machine.xfer.error_cb = NULL;
+    i2c->state_machine.xfer.error_cb_ctx = NULL;
+}
+
 mHalStatus mHalI2c_StateMachine(I2c i2c) {
     mHalStatus retval = MHAL_STATUS_ERROR;
     if (!i2c || !i2c->hi2c.Instance) return MHAL_STATUS_ERROR_INSTANCE;
+
+    mHalI2c_XferDone_cb cb = NULL;  // done_cb or error_cb (same signature)
+    void* cb_ctx = NULL;
 
     switch (i2c->state_machine.state) {
         case I2C_STATE_OK:
@@ -597,45 +624,29 @@ mHalStatus mHalI2c_StateMachine(I2c i2c) {
             retval = MHAL_STATUS_BUSY;
             break;
         case I2C_STATE_DONE:
-            if (i2c->state_machine.xfer.mode == I2C_MODE_FAST_PLUS) {
-                __HAL_SYSCFG_FASTMODEPLUS_DISABLE(fmp_flag[i2c->index]);
-            }
-            __HAL_I2C_DISABLE(&i2c->hi2c);
-            if (i2c->state_machine.xfer.done_cb) {
-                i2c->state_machine.xfer.done_cb(i2c->state_machine.xfer.done_cb_ctx);
-            }
+            cb = i2c->state_machine.xfer.done_cb;
+            cb_ctx = i2c->state_machine.xfer.done_cb_ctx;
             retval = MHAL_STATUS_DONE;
-            i2c->state_machine.state = I2C_STATE_OK;
-            i2c->state_machine.xfer.buffer = NULL;
-            i2c->state_machine.xfer.buffer_size = 0;
-            i2c->state_machine.xfer.reg_size = 0;
-            i2c->state_machine.xfer.done_cb = NULL;
-            i2c->state_machine.xfer.done_cb_ctx = NULL;
-            i2c->state_machine.xfer.error_cb = NULL;
-            i2c->state_machine.xfer.error_cb_ctx = NULL;
+            I2c_ResetXfer(i2c);
             break;
         case I2C_STATE_ERROR:
-            if (i2c->state_machine.xfer.error_cb) {
-                i2c->state_machine.xfer.error_cb(i2c->state_machine.xfer.error_cb_ctx);
-            }
+            cb = i2c->state_machine.xfer.error_cb;
+            cb_ctx = i2c->state_machine.xfer.error_cb_ctx;
             retval = i2c->state_machine.pending_error;
-            // fall-thru
-        default:
-            if (i2c->state_machine.xfer.mode == I2C_MODE_FAST_PLUS) {
-                __HAL_SYSCFG_FASTMODEPLUS_DISABLE(fmp_flag[i2c->index]);
-            }
-            __HAL_I2C_DISABLE(&i2c->hi2c);
             i2c->state_machine.error_count++;
-            i2c->state_machine.pending_error = MHAL_STATUS_OK;
-            i2c->state_machine.state = I2C_STATE_OK;
-            i2c->state_machine.xfer.buffer = NULL;
-            i2c->state_machine.xfer.buffer_size = 0;
-            i2c->state_machine.xfer.reg_size = 0;
-            i2c->state_machine.xfer.done_cb = NULL;
-            i2c->state_machine.xfer.done_cb_ctx = NULL;
-            i2c->state_machine.xfer.error_cb = NULL;
-            i2c->state_machine.xfer.error_cb_ctx = NULL;
+            I2c_ResetXfer(i2c);
             break;
+        default:
+            // should not get here
+            i2c->state_machine.error_count++;
+            I2c_ResetXfer(i2c);
+            break;
+    }
+
+    // Callback runs after the reset, so it may start the next transfer with
+    // mHalI2c_Xfer().
+    if (cb) {
+        cb(cb_ctx);
     }
 
     return retval;
